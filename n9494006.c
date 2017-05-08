@@ -98,8 +98,17 @@ void initialiseGame() {
 
 	show_screen();
 
-	while(btn_states[BTN_LEFT] == BTN_STATE_UP);
+	while(btn_states[BTN_LEFT] == BTN_STATE_UP && btn_states[BTN_RIGHT] == BTN_STATE_UP);
 	_delay_ms(100);
+
+	char buff[2];
+	for(int i = 3; i > 0; i--) {
+		clear_screen();
+		sprintf(buff, "%d", i);
+		draw_string(LCD_X / 2, LCD_Y / 2, buff);
+		show_screen();
+		_delay_ms(300);
+	}
 
 	clear_screen();
 	draw_string(0,0, "Spaghetti");
