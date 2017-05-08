@@ -18,3 +18,4 @@ all:
 	avr-gcc $(SRC).c $(FLAGS) $(LIBS) -o $(SRC).o
 	avr-objcopy -O ihex $(SRC).o $(SRC).hex
 	teensy_loader_cli -mmcu=atmega32u4 -w $(SRC).hex
+	rm *.o
