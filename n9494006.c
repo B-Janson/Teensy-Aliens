@@ -41,8 +41,37 @@ void draw();
 void process() {
 }
 
+void drawBackground() {
+	// Border
+	draw_line(0, 0, 0, LCD_Y - 1); 					// LEFT BORDER
+	draw_line(0, 0, LCD_X - 1, 0); 					// TOP BORDER
+	draw_line(0, LCD_Y - 1, LCD_X, LCD_Y - 1); 		// BOTTOM BORDER
+	draw_line(LCD_X - 1, 0, LCD_X - 1, LCD_Y - 1); 	// RIGHT BORDER
+
+	// Status Display
+	
+	// Dummy Variables TODO
+	int lives = 10;
+	int score = 0;
+	int secondsTotal = 0;
+	int minutes = secondsTotal / 60;
+	int seconds = secondsTotal % 60;
+
+	// buffer to convert ints to strings
+	char buff[20];
+
+	sprintf(buff, "%d", lives);
+	draw_string(1, 1, buff);
+	sprintf(buff, "%d", score);
+	draw_string(17, 1, buff);
+	sprintf(buff, "%02d:%02d", minutes, seconds);
+	draw_string(LCD_X - 28, 1, buff);
+
+	draw_line(0, 8, LCD_X - 1, 8);
+}
+
 void draw() {
-	//draw_string(0,0,"d");
+	drawBackground();
 }
 
 int main(void) {
@@ -54,9 +83,11 @@ int main(void) {
 	initialiseGame();
 	
 	while(1) {
+		clear_screen();
 		process();
 		draw();
 		show_screen();
+		_delay_ms(500);
 	}
 
 	return 0;
@@ -105,13 +136,10 @@ void initialiseGame() {
 	for(int i = 3; i > 0; i--) {
 		clear_screen();
 		sprintf(buff, "%d", i);
-		draw_string(LCD_X / 2, LCD_Y / 2, buff);
+		draw_string((LCD_X - 3) / 2, (LCD_Y - 8) / 2, buff);
 		show_screen();
 		_delay_ms(300);
 	}
-
-	clear_screen();
-	draw_string(0,0, "Spaghetti");
 	
 }
 
