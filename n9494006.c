@@ -5,6 +5,7 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #include "cpu_speed.h"
 #include "lcd.h"
@@ -28,17 +29,71 @@
 #define BTN_STATE_UP 0
 #define BTN_STATE_DOWN 1
 
+#define SHIP_WIDTH 5
+#define SHIP_HEIGHT 5
+
+#define STATUS_SCREEN_BOTTOM 8
+
 volatile unsigned char btn_hists[NUM_BUTTONS];
 volatile unsigned char btn_states[NUM_BUTTONS];
 
+bool gameOver;
+
+Sprite spaceCraft;
+unsigned char spaceCraftImage[] = {
+    0b00100000,
+    0b00100000,
+    0b11111000,
+    0b01110000,
+    0b11111000
+};
+
 void initialiseHardware();
 void initialiseGame();
-void debounce();
+void initialiseSpacecraft();
 
 void process();
+void processGameOver();
 void draw();
+void drawBackground();
+
+void resetGame();
 
 void process() {
+	if(gameOver) {
+		processGameOver();
+	} else {
+		for(int button = 0; button < NUM_BUTTONS; button++) {
+			if(btn_states[button] == BTN_STATE_DOWN) {
+				switch(button) {
+					case BTN_DPAD_LEFT:
+						if(spaceCraft.x > 1) {
+							spaceCraft.x--;
+						}
+					break;
+					case BTN_DPAD_RIGHT:
+						if(spaceCraft.x + SHIP_WIDTH < LCD_X - 1) {
+							spaceCraft.x++;
+						}
+					break;
+					case BTN_DPAD_UP:
+						if(spaceCraft.y > STATUS_SCREEN_BOTTOM + 1) {
+							spaceCraft.y--;
+						}
+					break;
+					case BTN_DPAD_DOWN:
+						if(spaceCraft.y + SHIP_HEIGHT < LCD_Y - 1) {
+							spaceCraft.y++;
+						}
+					break;
+					case BTN_LEFT:
+					break;
+					case BTN_RIGHT:
+					break;
+				}
+			}
+		}
+	}
 }
 
 void drawBackground() {
@@ -67,11 +122,34 @@ void drawBackground() {
 	sprintf(buff, "%02d:%02d", minutes, seconds);
 	draw_string(LCD_X - 28, 1, buff);
 
-	draw_line(0, 8, LCD_X - 1, 8);
+	draw_line(0, STATUS_SCREEN_BOTTOM, LCD_X - 1, STATUS_SCREEN_BOTTOM);
+}
+
+void processGameOver() {
+	// Clear the screen of previous elems
+	clear_screen();
+	// Write Game over and info to play again
+	// TODO fix strings stuff
+	draw_string(1, 1, "Game Over Dude");
+	draw_string(1, 9, "Press either left or right to play again");
+	show_screen(); // Show messages to player
+	// Sit and wait for button press
+	while(btn_states[BTN_LEFT] == BTN_STATE_UP && btn_states[BTN_RIGHT] == BTN_STATE_UP);
+	_delay_ms(100);
+	// Reset variables / general clean up
+	resetGame();
+}
+
+void resetGame() {
+	gameOver = false;
+	clear_screen();
+	initialiseGame();
+	clear_screen();
 }
 
 void draw() {
 	drawBackground();
+	draw_sprite(&spaceCraft);
 }
 
 int main(void) {
@@ -81,13 +159,15 @@ int main(void) {
 	initialiseHardware();
 
 	initialiseGame();
+
+	gameOver = false;
 	
 	while(1) {
 		clear_screen();
 		process();
 		draw();
 		show_screen();
-		_delay_ms(500);
+		_delay_ms(50);
 	}
 
 	return 0;
@@ -132,6 +212,8 @@ void initialiseGame() {
 	while(btn_states[BTN_LEFT] == BTN_STATE_UP && btn_states[BTN_RIGHT] == BTN_STATE_UP);
 	_delay_ms(100);
 
+	initialiseSpacecraft();
+
 	char buff[2];
 	for(int i = 3; i > 0; i--) {
 		clear_screen();
@@ -141,6 +223,10 @@ void initialiseGame() {
 		_delay_ms(300);
 	}
 	
+}
+
+void initialiseSpacecraft() {
+	init_sprite(&spaceCraft, 40, 40, SHIP_WIDTH, SHIP_HEIGHT, spaceCraftImage);
 }
 
 ISR(TIMER0_COMPA_vect) {
