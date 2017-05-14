@@ -32,6 +32,7 @@
 #define SHIP_WIDTH 		5
 #define SHIP_HEIGHT 	5
 
+#define NUM_ALIENS		1
 #define ALIEN_WIDTH 	5
 #define ALIEN_HEIGHT 	5
 #define ALIEN_WAITING 	0
@@ -47,8 +48,8 @@
 volatile unsigned char btn_hists[NUM_BUTTONS];
 volatile unsigned char btn_states[NUM_BUTTONS];
 volatile unsigned int timer1Overflow;
-// volatile unsigned int overflowsSinceAttack[1];
-// volatile unsigned char alienStates[1];
+volatile unsigned int overflowsSinceAttack[NUM_ALIENS];
+unsigned char alienStates[NUM_ALIENS];
 
 bool gameOver;
 int randomSeed;
@@ -63,31 +64,31 @@ unsigned char spaceCraftImage[] = {
 };
 int lastFacedDirection;
 
-// Sprite alien;
-// unsigned char alienImage[] = {
-//     0b11111000,
-//     0b00100000,
-//     0b01110000,
-//     0b00100000,
-//     0b11111000
-// };
+Sprite alien;
+unsigned char alienImage[] = {
+    0b11111000,
+    0b00100000,
+    0b01110000,
+    0b00100000,
+    0b11111000
+};
 
 void initialiseHardware();
 void initialiseGame();
 void initialiseSpacecraft();
-// void initialiseAlien();
+void initialiseAlien();
 
 void process();
 void processGameOver();
 void processInput();
-// void processAlien();
+void processAlien();
 
-// void alienAttack(int i);
+void alienAttack(int i);
 
 void draw();
 void drawBackground();
 void drawSpaceCraft();
-// void drawAlien();
+void drawAlien();
 
 void resetGame();
 // int rand();
@@ -99,11 +100,12 @@ void process() {
 		processGameOver();
 	} else {
 		processInput();
-		// processAlien();
+		processAlien();
 	}
 }
 
 void processInput() {
+	int movementSpeed = 2;
 	for(int button = 0; button < NUM_BUTTONS; button++) {
 		if(btn_states[button] == BTN_STATE_DOWN) {
 			//rotateSpaceCraft();
@@ -111,25 +113,37 @@ void processInput() {
 				case BTN_DPAD_LEFT:
 					lastFacedDirection = FACE_LEFT;
 					if(spaceCraft.x > 1) {
-						spaceCraft.x--;
+						spaceCraft.x -= movementSpeed;
+					}
+					if(spaceCraft.x <= 1) {
+						spaceCraft.x = 1;
 					}
 				break;
 				case BTN_DPAD_RIGHT:
 					lastFacedDirection = FACE_RIGHT;
 					if(spaceCraft.x + SHIP_WIDTH < LCD_X - 1) {
-						spaceCraft.x++;
+						spaceCraft.x += movementSpeed;
+					}
+					if(spaceCraft.x + SHIP_WIDTH >= LCD_X - 1) {
+						spaceCraft.x = LCD_X - 1 - SHIP_WIDTH;
 					}
 				break;
 				case BTN_DPAD_UP:
 					lastFacedDirection = FACE_UP;
 					if(spaceCraft.y > STATUS_SCREEN_BOTTOM + 1) {
-						spaceCraft.y--;
+						spaceCraft.y -= movementSpeed;
+					}
+					if(spaceCraft.y <= STATUS_SCREEN_BOTTOM + 1) {
+						spaceCraft.y = STATUS_SCREEN_BOTTOM + 1;
 					}
 				break;
 				case BTN_DPAD_DOWN:
 					lastFacedDirection = FACE_DOWN;
 					if(spaceCraft.y + SHIP_HEIGHT < LCD_Y - 1) {
-						spaceCraft.y++;
+						spaceCraft.y += movementSpeed;
+					}
+					if(spaceCraft.y + SHIP_HEIGHT >= LCD_Y - 1) {
+						spaceCraft.y = LCD_Y - 1 - SHIP_HEIGHT;
 					}
 				break;
 				case BTN_LEFT:
@@ -142,36 +156,85 @@ void processInput() {
 	
 }
 
-// void processAlien() {
-// 	if(overflowsSinceAttack[0] >= 8 && alienStates[0] == ALIEN_WAITING) {
-// 		int chance = TCNT1 % 100;
-// 		if(chance < 25) {
-// 			alienAttack(0);
-// 			alienStates[0] = ALIEN_ATTACKING;
-// 			overflowsSinceAttack[0] = 0;
-// 		}
-// 	}
+void processAlien() {
+	if(overflowsSinceAttack[0] >= 8 && alienStates[0] == ALIEN_WAITING) {
+		int chance = rand() % 100;
+		// char buff[20];
+		// sprintf(buff, "%d", chance);
+		// draw_string(25, 25, buff);
+		// show_screen();
+		if(chance < 25) {
+			alienAttack(0);
+			// alienStates[0] = ALIEN_ATTACKING;
+			// overflowsSinceAttack[0] = 0;
+		}
+	}
 
-// 	if(round(alien.x) == 1 || round(alien.x) + ALIEN_WIDTH >= LCD_X - 1 || alien.y <= STATUS_SCREEN_BOTTOM + 1 || alien.y >= LCD_Y - 1) {
-// 			alien.dx = -alien.dx;
-// 			alien.dy = -alien.dy;
-// 			alienStates[0] = ALIEN_WAITING;
-// 			overflowsSinceAttack[0] = 0;
-// 	}
+	alien.x = alien.x + alien.dx;
+	alien.y = alien.y + alien.dy;
 
-// 	alien.x += alien.dx;
-// 	alien.y += alien.dy;
-// }
+	if(alienStates[0] == ALIEN_ATTACKING && (alien.x <= 1 || alien.x + ALIEN_WIDTH >= LCD_X - 1)) {
+		if(alien.x <= 1) {
+			alien.x = 1;
+		} else if(alien.x + ALIEN_WIDTH >= LCD_X - 1) {
+			alien.x = LCD_X - 1 - ALIEN_WIDTH;
+		}
+		alien.dx = 0;
+		alien.dy = 0;
+		alienStates[0] = ALIEN_WAITING;
+		overflowsSinceAttack[0] = 0;
+	}
 
-// void alienAttack(int i) {
-// 	int chance = TCNT1 % 20;
-// 	if(chance <= 10) {
-// 		alien.dx = 1;
-// 	} else {
-// 		alien.dx = -1;
-// 	}
-// 	alien.dy = 1;
-// }
+	if(alienStates[0] == ALIEN_ATTACKING && (alien.y <= STATUS_SCREEN_BOTTOM + 1 || alien.y + ALIEN_HEIGHT >= LCD_Y - 1)) {
+		if(alien.y <= STATUS_SCREEN_BOTTOM + 1) {
+			alien.y = STATUS_SCREEN_BOTTOM + 1;
+		} else if(alien.y + ALIEN_HEIGHT >= LCD_Y - 1) {
+			alien.y = LCD_Y - 1 - ALIEN_HEIGHT;
+		}
+		alien.dx = 0;
+		alien.dy = 0;
+		alienStates[0] = ALIEN_WAITING;
+		overflowsSinceAttack[0] = 0;
+	}
+
+	// if(round(alien.x) == 1 || round(alien.x) + ALIEN_WIDTH >= LCD_X - 1 || alien.y <= STATUS_SCREEN_BOTTOM + 1 || alien.y >= LCD_Y - 1) {
+	// 		alien.dx = 0;
+	// 		alien.dy = 0;
+	// 		alienStates[0] = ALIEN_WAITING;
+	// 		overflowsSinceAttack[0] = 0;
+	// }
+
+	// int chance = TCNT1 % 20;
+	// if(chance < 1) {
+	// 	alien.dx = 1;
+	// } else {
+	// 	alien.dx = -1;
+	// }
+
+	
+}
+
+void alienAttack(int i) {
+	float x_ship = spaceCraft.x;
+	float y_ship = spaceCraft.y;
+	float x_alien = alien.x;
+	float y_alien = alien.y;
+
+	float dx = x_ship - x_alien;
+	dx = dx / 11.0;
+
+	float dy = y_ship - y_alien;
+	dy = dy / 11.0;
+
+	// char buff[20];
+	// sprintf(buff, "%2.1f:%2.1f", dx, dy);
+	// draw_string(25, 25, buff);
+	// show_screen();
+
+	alien.dx = dx;
+	alien.dy = dy;
+	alienStates[0] = ALIEN_ATTACKING;
+}
 
 void processGameOver() {
 	// Clear the screen of previous elems
@@ -191,7 +254,7 @@ void processGameOver() {
 void draw() {
 	drawBackground();
 	drawSpaceCraft();
-	// drawAlien();
+	drawAlien();
 }
 
 void drawBackground() {
@@ -246,9 +309,9 @@ void drawSpaceCraft() {
 	}
 }
 
-// void drawAlien() {
-// 	draw_sprite(&alien);
-// }
+void drawAlien() {
+	draw_sprite(&alien);
+}
 
 int main(void) {
 	// Set the CPU speed to 8MHz (you must also be compiling at 8MHz)
@@ -294,6 +357,7 @@ void initialiseHardware() {
 	clear_screen();
 	show_screen();
 
+	// Timer0 inturrupts every 0.008 sec
 	// Set Timer0 to CTC mode
     TCCR0A |= (1<<WGM01);
     // Prescaling to 256
@@ -303,6 +367,7 @@ void initialiseHardware() {
     // Set compare to value of 250
     OCR0A = 250;
 
+    // Timer1 inturrupts every 0.250 sec
     // Set Timer1 to CTC mode
     TCCR1A &= ~((1<<WGM10) | (1<<WGM11));
     TCCR1B |= (1<<WGM12);
@@ -314,8 +379,6 @@ void initialiseHardware() {
     OCR1A = 31250;
 
 	sei();
-
-	// srand(TCNT1);
 	
 }
 
@@ -339,7 +402,7 @@ void initialiseGame() {
 	srand(seed);
 
 	initialiseSpacecraft();
-	// initialiseAlien();
+	initialiseAlien();
 
 	char buff[2];
 	for(int i = 3; i > 0; i--) {
@@ -351,10 +414,10 @@ void initialiseGame() {
 	}
 
 	timer1Overflow = 0;
-	// for(int i = 0; i < 1; i++) {
-	// 	overflowsSinceAttack[i] = 0;
-	// 	alienStates[i] = ALIEN_WAITING;
-	// }
+	for(int i = 0; i < 1; i++) {
+		overflowsSinceAttack[i] = 0;
+		alienStates[i] = ALIEN_WAITING;
+	}
 	
 }
 
@@ -366,23 +429,24 @@ void initialiseSpacecraft() {
 	init_sprite(&spaceCraft, xStart, yStart, SHIP_WIDTH, SHIP_HEIGHT, spaceCraftImage);
 }
 
-// void initialiseAlien() {
-// 	int xStart = rand() % (LCD_X - 2 - ALIEN_WIDTH) + 1;
-// 	while(xStart >= spaceCraft.x && xStart <= spaceCraft.x + SHIP_WIDTH) {
-// 		xStart = rand() % (LCD_X - 2 - SHIP_WIDTH) + 1;
-// 	}
+void initialiseAlien() {
+	int xStart = rand() % (LCD_X - 2 - ALIEN_WIDTH) + 1;
+	while(xStart >= spaceCraft.x && xStart <= spaceCraft.x + SHIP_WIDTH) {
+		xStart = rand() % (LCD_X - 2 - SHIP_WIDTH) + 1;
+	}
 
-// 	int yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - STATUS_SCREEN_BOTTOM) 
-// 		+ STATUS_SCREEN_BOTTOM + 1;
-// 	while(yStart >= spaceCraft.y && yStart <= spaceCraft.y + SHIP_HEIGHT) {
-// 		yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - STATUS_SCREEN_BOTTOM) 
-// 				+ STATUS_SCREEN_BOTTOM + 1;
-// 	}
+	int yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - STATUS_SCREEN_BOTTOM) 
+		+ STATUS_SCREEN_BOTTOM + 1;
+	while(yStart >= spaceCraft.y && yStart <= spaceCraft.y + SHIP_HEIGHT) {
+		yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - STATUS_SCREEN_BOTTOM) 
+				+ STATUS_SCREEN_BOTTOM + 1;
+	}
 
-// 	alienStates[0] = ALIEN_WAITING;
+	alienStates[0] = ALIEN_WAITING;
+	overflowsSinceAttack[0] = 0;
 
-// 	init_sprite(&alien, xStart, yStart, SHIP_WIDTH, SHIP_HEIGHT, alienImage);
-// }
+	init_sprite(&alien, xStart, yStart, SHIP_WIDTH, SHIP_HEIGHT, alienImage);
+}
 
 // int rand() {
 // 	return abs((randomSeed = (randomSeed * 214013 + 2531011) % 758237));
@@ -436,7 +500,7 @@ ISR(TIMER0_COMPA_vect) {
 
 ISR(TIMER1_COMPA_vect) {
 	timer1Overflow++;
-	// for(int i = 0; i < 1; i++) {
-	// 	overflowsSinceAttack[i]++;
-	// }
+	for(int i = 0; i < 1; i++) {
+		overflowsSinceAttack[i]++;
+	}
 }
