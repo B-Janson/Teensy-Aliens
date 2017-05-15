@@ -38,6 +38,10 @@
 #define ALIEN_WAITING 	0
 #define ALIEN_ATTACKING 1
 
+#define NUM_MISSILES 	1
+#define MISSILE_WIDTH 	2
+#define MISSILE_HEIGHT 	2
+
 #define FACE_LEFT 	0
 #define FACE_UP 	1
 #define FACE_RIGHT 	2
@@ -53,6 +57,7 @@ unsigned char alienStates[NUM_ALIENS];
 
 bool gameOver;
 int randomSeed;
+int missilesInFlight;
 
 Sprite spaceCraft;
 unsigned char spaceCraftImage[] = {
@@ -73,27 +78,38 @@ unsigned char alienImage[] = {
     0b11111000
 };
 
+Sprite missile;
+unsigned char missileImage[] = {
+	0b11000000,
+	0b11000000
+};
+
 void initialiseHardware();
 void initialiseGame();
 void initialiseSpacecraft();
 void initialiseAlien();
+// void initialiseMissile();
 
 void process();
 void processGameOver();
 void processInput();
 void processAlien();
+void processMissile();
 
 void alienAttack(int i);
+void shootMissile();
 
 void draw();
 void drawBackground();
 void drawSpaceCraft();
 void drawAlien();
+void drawMissile();
 
 void resetGame();
 // int rand();
 int calculateSeconds();
 void rotateSpaceCraft();
+bool canShootMissile();
 
 void process() {
 	if(gameOver) {
@@ -101,6 +117,7 @@ void process() {
 	} else {
 		processInput();
 		processAlien();
+		processMissile();
 	}
 }
 
@@ -147,8 +164,12 @@ void processInput() {
 					}
 				break;
 				case BTN_LEFT:
+					gameOver = true;
 				break;
 				case BTN_RIGHT:
+					if(canShootMissile()) {
+						shootMissile();
+					}
 				break;
 			}
 		}
@@ -214,6 +235,19 @@ void processAlien() {
 	
 }
 
+void processMissile() {
+	if(missile.is_visible) {
+		if(missile.x <= 2 || missile.x + missile.width >= LCD_X - 2 ||
+				missile.y <= STATUS_SCREEN_BOTTOM + 2 || missile.y + missile.height >= LCD_Y - 2) {
+			missile.is_visible = false;
+			missilesInFlight--;
+		} else {
+			missile.x += missile.dx;
+			missile.y += missile.dy;
+		}
+	}
+}
+
 void alienAttack(int i) {
 	float x_ship = spaceCraft.x;
 	float y_ship = spaceCraft.y;
@@ -221,10 +255,15 @@ void alienAttack(int i) {
 	float y_alien = alien.y;
 
 	float dx = x_ship - x_alien;
-	dx = dx / 11.0;
 
 	float dy = y_ship - y_alien;
-	dy = dy / 11.0;
+
+	float dist_squared = dx * dx + dy * dy;
+	float dist = sqrt(dist_squared);
+	float speed = 4;
+
+	dx = dx * speed / dist;
+	dy = dy * speed / dist;
 
 	// char buff[20];
 	// sprintf(buff, "%2.1f:%2.1f", dx, dy);
@@ -236,17 +275,61 @@ void alienAttack(int i) {
 	alienStates[0] = ALIEN_ATTACKING;
 }
 
+void shootMissile() {
+	int xStart = 0;
+	int yStart = 0;
+	float dx = 0;
+	float dy = 0;
+	float speed = 3;
+
+	switch(lastFacedDirection) {
+		case(FACE_UP):
+			xStart = spaceCraft.x + SHIP_WIDTH / 2;
+			yStart = spaceCraft.y - 3;
+			dy = -speed;
+			init_sprite(&missile, xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
+		break;
+
+		case(FACE_DOWN):
+			xStart = spaceCraft.x + SHIP_WIDTH / 2;
+			yStart = spaceCraft.y + SHIP_HEIGHT + 3;
+			dy = speed;
+			init_sprite(&missile, xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
+		break;
+
+		case(FACE_LEFT):
+			xStart = spaceCraft.x - 3;
+			yStart = spaceCraft.y + SHIP_HEIGHT / 2;
+			dx = -speed;
+			init_sprite(&missile, xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
+		break;
+
+		case(FACE_RIGHT):
+			xStart = spaceCraft.x + SHIP_WIDTH + 3;
+			yStart = spaceCraft.y + SHIP_HEIGHT / 2;
+			dx = speed;
+			init_sprite(&missile, xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
+		break;
+	}
+	missilesInFlight++;
+
+	missile.dx = dx;
+	missile.dy = dy;
+}
+
 void processGameOver() {
 	// Clear the screen of previous elems
 	clear_screen();
 	// Write Game over and info to play again
 	// TODO fix strings stuff
-	draw_string(1, 1, "Game Over Dude");
-	draw_string(1, 9, "Press either left or right to play again");
+	draw_string(1, 0, "Game Over Dude");
+	draw_string(1, 8, "Press either left");
+	draw_string(1, 16, "or right to play");
+	draw_string(1, 24, "again!");
 	show_screen(); // Show messages to player
 	// Sit and wait for button press
 	while(btn_states[BTN_LEFT] == BTN_STATE_UP && btn_states[BTN_RIGHT] == BTN_STATE_UP);
-	_delay_ms(100);
+	_delay_ms(300);
 	// Reset variables / general clean up
 	resetGame();
 }
@@ -255,6 +338,7 @@ void draw() {
 	drawBackground();
 	drawSpaceCraft();
 	drawAlien();
+	drawMissile();
 }
 
 void drawBackground() {
@@ -313,6 +397,10 @@ void drawAlien() {
 	draw_sprite(&alien);
 }
 
+void drawMissile() {
+	draw_sprite(&missile);
+}
+
 int main(void) {
 	// Set the CPU speed to 8MHz (you must also be compiling at 8MHz)
 	set_clock_speed(CPU_8MHz);
@@ -332,7 +420,7 @@ int main(void) {
 		// draw_string(30, 30, buff);
 
 		show_screen();
-		_delay_ms(50);
+		_delay_ms(100);
 	}
 
 	return 0;
@@ -385,6 +473,8 @@ void initialiseHardware() {
 void initialiseGame() {
 	gameOver = false;
 	lastFacedDirection = FACE_UP;
+	missilesInFlight = 0;
+	missile.is_visible = 0;
 	
 	draw_string((LCD_X - 12*5) / 2, 0, "Alien Attack");
 	draw_string((LCD_X - 14*5) / 2, 8, "Brandon Janson");
@@ -454,6 +544,10 @@ void initialiseAlien() {
 
 int calculateSeconds() {
 	return timer1Overflow / 4;
+}
+
+bool canShootMissile() {
+	return missilesInFlight == 0;
 }
 
 // void rotateSpaceCraft() {
