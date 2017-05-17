@@ -31,6 +31,7 @@
 
 #define SHIP_WIDTH 		5
 #define SHIP_HEIGHT 	5
+#define TURRET_LENGTH 	3
 
 #define NUM_ALIENS		1
 #define ALIEN_WIDTH 	5
@@ -47,25 +48,30 @@
 #define FACE_RIGHT 	2
 #define FACE_DOWN 	3
 
-#define STATUS_SCREEN_BOTTOM 8
+#define LEFT_BORDER 	1
+#define RIGHT_BORDER 	1
+#define TOP_BORDER 		8
+#define BOTTOM_BORDER	1
 
 volatile unsigned char btn_hists[NUM_BUTTONS];
 volatile unsigned char btn_states[NUM_BUTTONS];
-volatile unsigned int timer1Overflow;
+volatile unsigned int systemTimeMilliseconds;
 volatile unsigned int overflowsSinceAttack[NUM_ALIENS];
 unsigned char alienStates[NUM_ALIENS];
 
 bool gameOver;
 int randomSeed;
 int missilesInFlight;
+int lives;
+int score;
 
 Sprite spaceCraft;
 unsigned char spaceCraftImage[] = {
     0b00100000,
-    0b00100000,
+    0b01110000,
     0b11111000,
     0b01110000,
-    0b11111000
+    0b00100000
 };
 int lastFacedDirection;
 
@@ -95,6 +101,7 @@ void processGameOver();
 void processInput();
 void processAlien();
 void processMissile();
+void checkCollisions();
 
 void alienAttack(int i);
 void shootMissile();
@@ -110,6 +117,7 @@ void resetGame();
 int calculateSeconds();
 void rotateSpaceCraft();
 bool canShootMissile();
+bool collided(Sprite* sprite1, Sprite* sprite2);
 
 void process() {
 	if(gameOver) {
@@ -118,54 +126,59 @@ void process() {
 		processInput();
 		processAlien();
 		processMissile();
+		checkCollisions();
 	}
 }
 
 void processInput() {
-	int movementSpeed = 2;
+	// Number of pixels moved on click
+	int movementSpeed = 1;
+	// Loop through each button and check if pressed
 	for(int button = 0; button < NUM_BUTTONS; button++) {
 		if(btn_states[button] == BTN_STATE_DOWN) {
 			//rotateSpaceCraft();
 			switch(button) {
+
 				case BTN_DPAD_LEFT:
 					lastFacedDirection = FACE_LEFT;
-					if(spaceCraft.x > 1) {
+					if(spaceCraft.x > LEFT_BORDER + TURRET_LENGTH) {
 						spaceCraft.x -= movementSpeed;
-					}
-					if(spaceCraft.x <= 1) {
-						spaceCraft.x = 1;
+					} else {
+						spaceCraft.x = LEFT_BORDER + TURRET_LENGTH;
 					}
 				break;
+
 				case BTN_DPAD_RIGHT:
 					lastFacedDirection = FACE_RIGHT;
-					if(spaceCraft.x + SHIP_WIDTH < LCD_X - 1) {
+					if(spaceCraft.x + SHIP_WIDTH < LCD_X - RIGHT_BORDER - TURRET_LENGTH) {
 						spaceCraft.x += movementSpeed;
-					}
-					if(spaceCraft.x + SHIP_WIDTH >= LCD_X - 1) {
-						spaceCraft.x = LCD_X - 1 - SHIP_WIDTH;
+					} else {
+						spaceCraft.x = LCD_X - RIGHT_BORDER - SHIP_WIDTH - TURRET_LENGTH;
 					}
 				break;
+
 				case BTN_DPAD_UP:
 					lastFacedDirection = FACE_UP;
-					if(spaceCraft.y > STATUS_SCREEN_BOTTOM + 1) {
+					if(spaceCraft.y > TOP_BORDER + 1 + TURRET_LENGTH) {
 						spaceCraft.y -= movementSpeed;
-					}
-					if(spaceCraft.y <= STATUS_SCREEN_BOTTOM + 1) {
-						spaceCraft.y = STATUS_SCREEN_BOTTOM + 1;
+					} else {
+						spaceCraft.y = TOP_BORDER + 1 + TURRET_LENGTH;
 					}
 				break;
+
 				case BTN_DPAD_DOWN:
 					lastFacedDirection = FACE_DOWN;
-					if(spaceCraft.y + SHIP_HEIGHT < LCD_Y - 1) {
+					if(spaceCraft.y + SHIP_HEIGHT < LCD_Y - BOTTOM_BORDER - TURRET_LENGTH) {
 						spaceCraft.y += movementSpeed;
-					}
-					if(spaceCraft.y + SHIP_HEIGHT >= LCD_Y - 1) {
-						spaceCraft.y = LCD_Y - 1 - SHIP_HEIGHT;
+					} else {
+						spaceCraft.y = LCD_Y - BOTTOM_BORDER - SHIP_HEIGHT - TURRET_LENGTH;
 					}
 				break;
+
 				case BTN_LEFT:
 					gameOver = true;
 				break;
+
 				case BTN_RIGHT:
 					if(canShootMissile()) {
 						shootMissile();
@@ -178,7 +191,7 @@ void processInput() {
 }
 
 void processAlien() {
-	if(overflowsSinceAttack[0] >= 8 && alienStates[0] == ALIEN_WAITING) {
+	if(overflowsSinceAttack[0] >= 2000 && alienStates[0] == ALIEN_WAITING) {
 		int chance = rand() % 100;
 		// char buff[20];
 		// sprintf(buff, "%d", chance);
@@ -206,9 +219,9 @@ void processAlien() {
 		overflowsSinceAttack[0] = 0;
 	}
 
-	if(alienStates[0] == ALIEN_ATTACKING && (alien.y <= STATUS_SCREEN_BOTTOM + 1 || alien.y + ALIEN_HEIGHT >= LCD_Y - 1)) {
-		if(alien.y <= STATUS_SCREEN_BOTTOM + 1) {
-			alien.y = STATUS_SCREEN_BOTTOM + 1;
+	if(alienStates[0] == ALIEN_ATTACKING && (alien.y <= TOP_BORDER + 1 || alien.y + ALIEN_HEIGHT >= LCD_Y - 1)) {
+		if(alien.y <= TOP_BORDER + 1) {
+			alien.y = TOP_BORDER + 1;
 		} else if(alien.y + ALIEN_HEIGHT >= LCD_Y - 1) {
 			alien.y = LCD_Y - 1 - ALIEN_HEIGHT;
 		}
@@ -218,7 +231,7 @@ void processAlien() {
 		overflowsSinceAttack[0] = 0;
 	}
 
-	// if(round(alien.x) == 1 || round(alien.x) + ALIEN_WIDTH >= LCD_X - 1 || alien.y <= STATUS_SCREEN_BOTTOM + 1 || alien.y >= LCD_Y - 1) {
+	// if(round(alien.x) == 1 || round(alien.x) + ALIEN_WIDTH >= LCD_X - 1 || alien.y <= TOP_BORDER + 1 || alien.y >= LCD_Y - 1) {
 	// 		alien.dx = 0;
 	// 		alien.dy = 0;
 	// 		alienStates[0] = ALIEN_WAITING;
@@ -238,12 +251,37 @@ void processAlien() {
 void processMissile() {
 	if(missile.is_visible) {
 		if(missile.x <= 2 || missile.x + missile.width >= LCD_X - 2 ||
-				missile.y <= STATUS_SCREEN_BOTTOM + 2 || missile.y + missile.height >= LCD_Y - 2) {
+				missile.y <= TOP_BORDER + 2 || missile.y + missile.height >= LCD_Y - 2) {
 			missile.is_visible = false;
 			missilesInFlight--;
 		} else {
 			missile.x += missile.dx;
 			missile.y += missile.dy;
+		}
+	}
+}
+
+void checkCollisions() {
+	// Loop through aliens and check if collided with player
+	for(int i = 0; i < NUM_ALIENS; i++) {
+		if(!alien.is_visible) {
+			continue;
+		}
+		if(collided(&spaceCraft, &alien)) {
+			lives--;
+			if(lives == 0) {
+				gameOver = true;
+			} else {
+				initialiseSpacecraft();
+				missile.is_visible = 0;
+			}
+		}
+		if(!missile.is_visible) {
+			continue;
+		}
+		if(collided(&alien, &missile)) {
+			score++;
+			initialiseAlien();
 		}
 	}
 }
@@ -260,7 +298,8 @@ void alienAttack(int i) {
 
 	float dist_squared = dx * dx + dy * dy;
 	float dist = sqrt(dist_squared);
-	float speed = 4;
+
+	float speed = 2;
 
 	dx = dx * speed / dist;
 	dy = dy * speed / dist;
@@ -280,7 +319,7 @@ void shootMissile() {
 	int yStart = 0;
 	float dx = 0;
 	float dy = 0;
-	float speed = 3;
+	float speed = 2.5;
 
 	switch(lastFacedDirection) {
 		case(FACE_UP):
@@ -312,6 +351,7 @@ void shootMissile() {
 		break;
 	}
 	missilesInFlight++;
+	missile.is_visible = 1;
 
 	missile.dx = dx;
 	missile.dy = dy;
@@ -351,8 +391,8 @@ void drawBackground() {
 	// Status Display
 	
 	// Dummy Variables TODO
-	int lives = 10;
-	int score = 0;
+	// int lives = 10;
+	// int score = 0;
 	int secondsTotal = calculateSeconds();
 	int minutes = secondsTotal / 60;
 	int seconds = secondsTotal % 60;
@@ -360,35 +400,35 @@ void drawBackground() {
 	// buffer to convert ints to strings
 	char buff[20];
 
-	sprintf(buff, "%d", lives);
+	sprintf(buff, "L:%d", lives);
 	draw_string(1, 1, buff);
-	sprintf(buff, "%d", score);
-	draw_string(17, 1, buff);
+	sprintf(buff, "S:%d", score);
+	draw_string(26, 1, buff);
 	sprintf(buff, "%02d:%02d", minutes, seconds);
 	draw_string(LCD_X - 28, 1, buff);
 
-	draw_line(0, STATUS_SCREEN_BOTTOM, LCD_X - 1, STATUS_SCREEN_BOTTOM);
+	draw_line(0, TOP_BORDER, LCD_X - 1, TOP_BORDER);
 }
 
 void drawSpaceCraft() {
 	draw_sprite(&spaceCraft);
 	int x = spaceCraft.x;
 	int y = spaceCraft.y;
-	int length = 2;
 	switch(lastFacedDirection) {
 		case FACE_LEFT:
-			if(x > 3) {
-				draw_line(x - 2, y + SHIP_HEIGHT / 2, x - 2 - length, y + SHIP_HEIGHT / 2);
-			}
+			draw_line(x - 1, y + SHIP_HEIGHT / 2, x - TURRET_LENGTH, y + SHIP_HEIGHT / 2);
 		break;
+
 		case FACE_UP:
-			draw_line(x + SHIP_WIDTH / 2, y - 2, x + SHIP_WIDTH / 2, y - 4);
+			draw_line(x + SHIP_WIDTH / 2, y - 1, x + SHIP_WIDTH / 2, y - TURRET_LENGTH);
 		break;
+
 		case FACE_DOWN:
-			draw_line(x + SHIP_WIDTH / 2, y + SHIP_HEIGHT + 1, x + SHIP_WIDTH / 2, y + SHIP_HEIGHT + 3);
+			draw_line(x + SHIP_WIDTH / 2, y + SHIP_HEIGHT, x + SHIP_WIDTH / 2, y + SHIP_HEIGHT + TURRET_LENGTH - 1);
 		break;
+
 		case FACE_RIGHT:
-			draw_line(x + SHIP_WIDTH + 1, y + SHIP_HEIGHT / 2, x + SHIP_WIDTH + 3, y + SHIP_HEIGHT / 2);
+			draw_line(x + SHIP_WIDTH, y + SHIP_HEIGHT / 2, x + SHIP_WIDTH + TURRET_LENGTH - 1, y + SHIP_HEIGHT / 2);
 		break;
 	}
 }
@@ -398,7 +438,10 @@ void drawAlien() {
 }
 
 void drawMissile() {
-	draw_sprite(&missile);
+	if(missile.is_visible) {
+		draw_sprite(&missile);	
+	}
+	
 }
 
 int main(void) {
@@ -420,7 +463,7 @@ int main(void) {
 		// draw_string(30, 30, buff);
 
 		show_screen();
-		_delay_ms(100);
+		_delay_ms(75);
 	}
 
 	return 0;
@@ -437,6 +480,10 @@ void initialiseHardware() {
 	DDRF &= ~((1 << PF5) | (1 << PF6));
     DDRB &= ~((1 << PB1) | (1 << PB7) | (1 << PB0));
     DDRD &= ~((1 << PD0) | (1 << PD1));
+    
+    
+    DDRC |= 1 << 7;
+    PORTC |= 1<<7;
 
     DDRB |= ((1 << PB2) | (1 << PB3));  
 
@@ -455,16 +502,16 @@ void initialiseHardware() {
     // Set compare to value of 250
     OCR0A = 250;
 
-    // Timer1 inturrupts every 0.250 sec
+    // Timer1 inturrupts every 0.001 sec
     // Set Timer1 to CTC mode
     TCCR1A &= ~((1<<WGM10) | (1<<WGM11));
     TCCR1B |= (1<<WGM12);
-    // Prescaling to 256
+    // Prescaling to 64
     TCCR1B |= ((1<<CS11) | (1 << CS10));
-    // Set inturrupt on compare to match for 250
+    // Set inturrupt on compare to match for 125
     TIMSK1 |= (1<<OCIE1A);
-    // Set compare to value of 250
-    OCR1A = 31250;
+    // Set compare to value of 125
+    OCR1A = 125;
 
 	sei();
 	
@@ -475,6 +522,8 @@ void initialiseGame() {
 	lastFacedDirection = FACE_UP;
 	missilesInFlight = 0;
 	missile.is_visible = 0;
+	lives = 10;
+	score = 0;
 	
 	draw_string((LCD_X - 12*5) / 2, 0, "Alien Attack");
 	draw_string((LCD_X - 14*5) / 2, 8, "Brandon Janson");
@@ -503,7 +552,7 @@ void initialiseGame() {
 		_delay_ms(300);
 	}
 
-	timer1Overflow = 0;
+	systemTimeMilliseconds = 0;
 	for(int i = 0; i < 1; i++) {
 		overflowsSinceAttack[i] = 0;
 		alienStates[i] = ALIEN_WAITING;
@@ -512,9 +561,9 @@ void initialiseGame() {
 }
 
 void initialiseSpacecraft() {
-	int xStart = rand() % (LCD_X - 2 - SHIP_WIDTH) + 1;
-	int yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - STATUS_SCREEN_BOTTOM) 
-		+ STATUS_SCREEN_BOTTOM + 1;
+	int xStart = rand() % (LCD_X - 2 - SHIP_WIDTH - TURRET_LENGTH) + 1;
+	int yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - TOP_BORDER - TURRET_LENGTH) 
+		+ TOP_BORDER + 1;
 
 	init_sprite(&spaceCraft, xStart, yStart, SHIP_WIDTH, SHIP_HEIGHT, spaceCraftImage);
 }
@@ -525,11 +574,11 @@ void initialiseAlien() {
 		xStart = rand() % (LCD_X - 2 - SHIP_WIDTH) + 1;
 	}
 
-	int yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - STATUS_SCREEN_BOTTOM) 
-		+ STATUS_SCREEN_BOTTOM + 1;
+	int yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - TOP_BORDER) 
+		+ TOP_BORDER + 1;
 	while(yStart >= spaceCraft.y && yStart <= spaceCraft.y + SHIP_HEIGHT) {
-		yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - STATUS_SCREEN_BOTTOM) 
-				+ STATUS_SCREEN_BOTTOM + 1;
+		yStart = rand() % (LCD_Y - 2 - SHIP_HEIGHT - TOP_BORDER) 
+				+ TOP_BORDER + 1;
 	}
 
 	alienStates[0] = ALIEN_WAITING;
@@ -543,12 +592,74 @@ void initialiseAlien() {
 // }
 
 int calculateSeconds() {
-	return timer1Overflow / 4;
+	return systemTimeMilliseconds / 1000;
 }
 
 bool canShootMissile() {
-	return missilesInFlight == 0;
+	return !missile.is_visible;
 }
+
+bool collided(Sprite* sprite1, Sprite* sprite2) {
+	int first_left		= round(sprite1->x);
+	int first_right 	= first_left + (sprite1->width) - 1;
+	int first_top 		= round(sprite1->y);
+	int first_bottom	= first_top + sprite1->height - 1;
+
+	int second_left		= round(sprite2->x);
+	int second_right 	= second_left + sprite2->width- 1;
+	int second_top 		= round(sprite2->y);
+	int second_bottom	= second_top + sprite2->height - 1;
+
+	if(first_right < second_left) {
+		return false;
+	}
+
+	if(first_left > second_right) {
+		return false;
+	}
+
+	if(first_bottom < second_top) {
+		return false;
+	}
+
+	if(first_top > second_bottom) {
+		return false;
+	}
+
+	return true;
+}
+
+// bool collided(sprite_id firstSprite, sprite_id secondSprite) {
+// 	// First sprite passed as input
+// 	int first_left		= round(sprite_x(firstSprite));
+// 	int first_right 	= first_left + sprite_width(firstSprite) - 1;
+// 	int first_top 		= round(sprite_y(firstSprite));
+// 	int first_bottom	= first_top + sprite_height(firstSprite) - 1;
+
+// 	// Second sprite passed as input
+// 	int second_left		= round(sprite_x(secondSprite));
+// 	int second_right 	= second_left + sprite_width(secondSprite) - 1;
+// 	int second_top 		= round(sprite_y(secondSprite));
+// 	int second_bottom	= second_top + sprite_height(secondSprite) - 1;
+
+// 	if(first_right < second_left) {
+// 		return false;
+// 	}
+
+// 	if(first_left > second_right) {
+// 		return false;
+// 	}
+
+// 	if(first_bottom < second_top) {
+// 		return false;
+// 	}
+
+// 	if(first_top > second_bottom) {
+// 		return false;
+// 	}
+
+// 	return collidedPixel(firstSprite, secondSprite);
+// }
 
 // void rotateSpaceCraft() {
 // 	unsigned char spaceCraftImages[] = {
@@ -593,7 +704,7 @@ ISR(TIMER0_COMPA_vect) {
 }
 
 ISR(TIMER1_COMPA_vect) {
-	timer1Overflow++;
+	systemTimeMilliseconds++;
 	for(int i = 0; i < 1; i++) {
 		overflowsSinceAttack[i]++;
 	}
