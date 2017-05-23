@@ -11,6 +11,9 @@
 #include "lcd.h"
 #include "graphics.h"
 #include "sprite.h"
+#include "usb_serial.h"
+
+#define GAME_TICK 75
 
 #define LED0 	PB2
 #define LED1 	PB3
@@ -33,7 +36,7 @@
 #define SHIP_HEIGHT 	5
 #define TURRET_LENGTH 	3
 
-#define NUM_ALIENS		4
+#define NUM_ALIENS		5
 #define ALIEN_WIDTH 	5
 #define ALIEN_HEIGHT 	5
 #define ALIEN_WAITING 	0
@@ -64,6 +67,7 @@ int randomSeed;
 int missilesInFlight;
 int lives;
 int score;
+int nextMissilePos;
 
 Sprite spaceCraft;
 unsigned char spaceCraftImage[] = {
@@ -84,7 +88,7 @@ unsigned char alienImage[] = {
     0b11111000
 };
 
-Sprite missile;
+Sprite missile[NUM_MISSILES];
 unsigned char missileImage[] = {
 	0b11000000,
 	0b11000000
@@ -102,7 +106,8 @@ void processGameOver();
 void processInput();
 void processAlien(int i);
 void processAliens();
-void processMissile();
+void processMissile(int i);
+void processMissiles();
 void checkCollisions();
 
 void alienAttack(int i);
@@ -113,14 +118,17 @@ void drawBackground();
 void drawSpaceCraft();
 void drawAlien(int i);
 void drawAliens();
-void drawMissile();
+void drawMissile(int i);
+void drawMissiles();
 
 void resetGame();
-// int rand();
 int calculateSeconds();
-void rotateSpaceCraft();
 bool canShootMissile();
 bool collided(Sprite* sprite1, Sprite* sprite2);
+void send_debug_string(char* string);
+void send_line(char* string);
+void recv_line(char* buff, unsigned char max_length);
+void draw_centred(unsigned char y, char* string);
 
 /* ************* Process functions ************* */
 void process() {
@@ -130,7 +138,8 @@ void process() {
 		processInput();
 		processAliens();
 		// processAlien(0);
-		processMissile();
+		processMissiles();
+		// processMissile();
 		checkCollisions();
 	}
 }
@@ -261,15 +270,21 @@ void processAlien(int i) {
 	
 }
 
-void processMissile() {
-	if(missile.is_visible) {
-		if(missile.x <= 2 || missile.x + missile.width >= LCD_X - 2 ||
-				missile.y <= TOP_BORDER + 2 || missile.y + missile.height >= LCD_Y - 2) {
-			missile.is_visible = false;
+void processMissiles() {
+	for(int i = 0; i < NUM_MISSILES; i++) {
+		processMissile(i);
+	}
+}
+
+void processMissile(int i) {
+	if(missile[i].is_visible) {
+		if(missile[i].x <= 2 || missile[i].x + missile[i].width >= LCD_X - 2 ||
+				missile[i].y <= TOP_BORDER + 2 || missile[i].y + missile[i].height >= LCD_Y - 2) {
+			missile[i].is_visible = false;
 			missilesInFlight--;
 		} else {
-			missile.x += missile.dx;
-			missile.y += missile.dy;
+			missile[i].x += missile[i].dx;
+			missile[i].y += missile[i].dy;
 		}
 	}
 }
@@ -286,15 +301,18 @@ void checkCollisions() {
 				gameOver = true;
 			} else {
 				initialiseSpacecraft();
-				missile.is_visible = 0;
 			}
 		}
-		if(!missile.is_visible) {
-			continue;
-		}
-		if(collided(&alien[i], &missile)) {
-			score++;
-			initialiseAlien(i);
+		for(int j = 0; j < NUM_MISSILES; j++) {
+			if(!missile[j].is_visible) {
+				continue;
+			}
+			if(collided(&alien[i], &missile[j])) {
+				score++;
+				missilesInFlight--;
+				missile[j].is_visible = 0;
+				initialiseAlien(i);
+			}
 		}
 	}
 }
@@ -312,7 +330,7 @@ void alienAttack(int i) {
 	float dist_squared = dx * dx + dy * dy;
 	float dist = sqrt(dist_squared);
 
-	float speed = 2;
+	float speed = 1.8;
 
 	dx = dx * speed / dist;
 	dy = dy * speed / dist;
@@ -332,42 +350,43 @@ void shootMissile() {
 	int yStart = 0;
 	float dx = 0;
 	float dy = 0;
-	float speed = 2.5;
+	float speed = 2;
 
 	switch(lastFacedDirection) {
 		case(FACE_UP):
 			xStart = spaceCraft.x + SHIP_WIDTH / 2;
 			yStart = spaceCraft.y - 3;
 			dy = -speed;
-			init_sprite(&missile, xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
+			init_sprite(&missile[nextMissilePos], xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
 		break;
 
 		case(FACE_DOWN):
 			xStart = spaceCraft.x + SHIP_WIDTH / 2;
 			yStart = spaceCraft.y + SHIP_HEIGHT + 3;
 			dy = speed;
-			init_sprite(&missile, xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
+			init_sprite(&missile[nextMissilePos], xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
 		break;
 
 		case(FACE_LEFT):
 			xStart = spaceCraft.x - 3;
 			yStart = spaceCraft.y + SHIP_HEIGHT / 2;
 			dx = -speed;
-			init_sprite(&missile, xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
+			init_sprite(&missile[nextMissilePos], xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
 		break;
 
 		case(FACE_RIGHT):
 			xStart = spaceCraft.x + SHIP_WIDTH + 3;
 			yStart = spaceCraft.y + SHIP_HEIGHT / 2;
 			dx = speed;
-			init_sprite(&missile, xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
+			init_sprite(&missile[nextMissilePos], xStart, yStart, MISSILE_WIDTH, MISSILE_HEIGHT, missileImage);
 		break;
 	}
 	missilesInFlight++;
-	missile.is_visible = 1;
+	missile[nextMissilePos].is_visible = 1;
 
-	missile.dx = dx;
-	missile.dy = dy;
+	missile[nextMissilePos].dx = dx;
+	missile[nextMissilePos].dy = dy;
+	nextMissilePos = (nextMissilePos + 1) % NUM_MISSILES;
 }
 
 void processGameOver() {
@@ -392,7 +411,8 @@ void draw() {
 	drawSpaceCraft();
 	drawAliens();
 	// drawAlien(0);
-	drawMissile();
+	drawMissiles();
+	// drawMissile();
 }
 
 void drawBackground() {
@@ -457,9 +477,14 @@ void drawAlien(int i) {
 	draw_sprite(&alien[i]);
 }
 
-void drawMissile() {
-	if(missile.is_visible) {
-		draw_sprite(&missile);	
+void drawMissiles() {
+	for(int i = 0; i < NUM_MISSILES; i++) {
+		drawMissile(i);
+	}
+}
+void drawMissile(int i) {
+	if(missile[i].is_visible) {
+		draw_sprite(&missile[i]);	
 	}
 	
 }
@@ -478,12 +503,12 @@ int main(void) {
 		draw();
 
 		// char buff[20];
-		// sprintf(buff, "%d", rand() % 100);
+		// sprintf(buff, "%d", missilesInFlight);
 		// _delay_ms(100);
 		// draw_string(30, 30, buff);
 
 		show_screen();
-		_delay_ms(75);
+		_delay_ms(GAME_TICK);
 	}
 
 	return 0;
@@ -509,6 +534,7 @@ void initialiseHardware() {
 
 	// Initialise the LCD screen
 	lcd_init(LCD_DEFAULT_CONTRAST);
+	usb_init();
 	clear_screen();
 	show_screen();
 
@@ -541,7 +567,10 @@ void initialiseGame() {
 	gameOver = false;
 	lastFacedDirection = FACE_UP;
 	missilesInFlight = 0;
-	missile.is_visible = 0;
+	for(int i = 0; i < NUM_MISSILES; i++) {
+		missile[i].is_visible = 0;
+	}
+	nextMissilePos = 0;
 	lives = 10;
 	score = 0;
 	
@@ -623,7 +652,7 @@ int calculateSeconds() {
 }
 
 bool canShootMissile() {
-	return !missile.is_visible;
+	return missilesInFlight < NUM_MISSILES;
 }
 
 bool collided(Sprite* sprite1, Sprite* sprite2) {
