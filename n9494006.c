@@ -33,13 +33,13 @@
 #define SHIP_HEIGHT 	5
 #define TURRET_LENGTH 	3
 
-#define NUM_ALIENS		1
+#define NUM_ALIENS		4
 #define ALIEN_WIDTH 	5
 #define ALIEN_HEIGHT 	5
 #define ALIEN_WAITING 	0
 #define ALIEN_ATTACKING 1
 
-#define NUM_MISSILES 	1
+#define NUM_MISSILES 	5
 #define MISSILE_WIDTH 	2
 #define MISSILE_HEIGHT 	2
 
@@ -75,7 +75,7 @@ unsigned char spaceCraftImage[] = {
 };
 int lastFacedDirection;
 
-Sprite alien;
+Sprite alien[NUM_ALIENS];
 unsigned char alienImage[] = {
     0b11111000,
     0b00100000,
@@ -93,13 +93,15 @@ unsigned char missileImage[] = {
 void initialiseHardware();
 void initialiseGame();
 void initialiseSpacecraft();
-void initialiseAlien();
+void initialiseAlien(int i);
+void initialiseAliens();
 // void initialiseMissile();
 
 void process();
 void processGameOver();
 void processInput();
-void processAlien();
+void processAlien(int i);
+void processAliens();
 void processMissile();
 void checkCollisions();
 
@@ -109,7 +111,8 @@ void shootMissile();
 void draw();
 void drawBackground();
 void drawSpaceCraft();
-void drawAlien();
+void drawAlien(int i);
+void drawAliens();
 void drawMissile();
 
 void resetGame();
@@ -119,17 +122,21 @@ void rotateSpaceCraft();
 bool canShootMissile();
 bool collided(Sprite* sprite1, Sprite* sprite2);
 
+/* ************* Process functions ************* */
 void process() {
 	if(gameOver) {
 		processGameOver();
 	} else {
 		processInput();
-		processAlien();
+		processAliens();
+		// processAlien(0);
 		processMissile();
 		checkCollisions();
 	}
 }
 
+/* Processes player input to move spaceship  
+*/
 void processInput() {
 	// Number of pixels moved on click
 	int movementSpeed = 1;
@@ -190,45 +197,51 @@ void processInput() {
 	
 }
 
-void processAlien() {
-	if(overflowsSinceAttack[0] >= 2000 && alienStates[0] == ALIEN_WAITING) {
+void processAliens() {
+	for(int i = 0; i < NUM_ALIENS; i++) {
+		processAlien(i);
+	}
+}
+
+void processAlien(int i) {
+	if(overflowsSinceAttack[i] >= 2000 && alienStates[i] == ALIEN_WAITING) {
 		int chance = rand() % 100;
 		// char buff[20];
 		// sprintf(buff, "%d", chance);
 		// draw_string(25, 25, buff);
 		// show_screen();
 		if(chance < 25) {
-			alienAttack(0);
+			alienAttack(i);
 			// alienStates[0] = ALIEN_ATTACKING;
 			// overflowsSinceAttack[0] = 0;
 		}
 	}
 
-	alien.x = alien.x + alien.dx;
-	alien.y = alien.y + alien.dy;
+	alien[i].x = alien[i].x + alien[i].dx;
+	alien[i].y = alien[i].y + alien[i].dy;
 
-	if(alienStates[0] == ALIEN_ATTACKING && (alien.x <= 1 || alien.x + ALIEN_WIDTH >= LCD_X - 1)) {
-		if(alien.x <= 1) {
-			alien.x = 1;
-		} else if(alien.x + ALIEN_WIDTH >= LCD_X - 1) {
-			alien.x = LCD_X - 1 - ALIEN_WIDTH;
+	if(alienStates[i] == ALIEN_ATTACKING && (alien[i].x <= 1 || alien[i].x + ALIEN_WIDTH >= LCD_X - 1)) {
+		if(alien[i].x <= 1) {
+			alien[i].x = 1;
+		} else if(alien[i].x + ALIEN_WIDTH >= LCD_X - 1) {
+			alien[i].x = LCD_X - 1 - ALIEN_WIDTH;
 		}
-		alien.dx = 0;
-		alien.dy = 0;
-		alienStates[0] = ALIEN_WAITING;
-		overflowsSinceAttack[0] = 0;
+		alien[i].dx = 0;
+		alien[i].dy = 0;
+		alienStates[i] = ALIEN_WAITING;
+		overflowsSinceAttack[i] = 0;
 	}
 
-	if(alienStates[0] == ALIEN_ATTACKING && (alien.y <= TOP_BORDER + 1 || alien.y + ALIEN_HEIGHT >= LCD_Y - 1)) {
-		if(alien.y <= TOP_BORDER + 1) {
-			alien.y = TOP_BORDER + 1;
-		} else if(alien.y + ALIEN_HEIGHT >= LCD_Y - 1) {
-			alien.y = LCD_Y - 1 - ALIEN_HEIGHT;
+	if(alienStates[i] == ALIEN_ATTACKING && (alien[i].y <= TOP_BORDER + 1 || alien[i].y + ALIEN_HEIGHT >= LCD_Y - 1)) {
+		if(alien[i].y <= TOP_BORDER + 1) {
+			alien[i].y = TOP_BORDER + 1;
+		} else if(alien[i].y + ALIEN_HEIGHT >= LCD_Y - 1) {
+			alien[i].y = LCD_Y - 1 - ALIEN_HEIGHT;
 		}
-		alien.dx = 0;
-		alien.dy = 0;
-		alienStates[0] = ALIEN_WAITING;
-		overflowsSinceAttack[0] = 0;
+		alien[i].dx = 0;
+		alien[i].dy = 0;
+		alienStates[i] = ALIEN_WAITING;
+		overflowsSinceAttack[i] = 0;
 	}
 
 	// if(round(alien.x) == 1 || round(alien.x) + ALIEN_WIDTH >= LCD_X - 1 || alien.y <= TOP_BORDER + 1 || alien.y >= LCD_Y - 1) {
@@ -264,10 +277,10 @@ void processMissile() {
 void checkCollisions() {
 	// Loop through aliens and check if collided with player
 	for(int i = 0; i < NUM_ALIENS; i++) {
-		if(!alien.is_visible) {
+		if(!alien[i].is_visible) {
 			continue;
 		}
-		if(collided(&spaceCraft, &alien)) {
+		if(collided(&spaceCraft, &alien[i])) {
 			lives--;
 			if(lives == 0) {
 				gameOver = true;
@@ -279,9 +292,9 @@ void checkCollisions() {
 		if(!missile.is_visible) {
 			continue;
 		}
-		if(collided(&alien, &missile)) {
+		if(collided(&alien[i], &missile)) {
 			score++;
-			initialiseAlien();
+			initialiseAlien(i);
 		}
 	}
 }
@@ -289,8 +302,8 @@ void checkCollisions() {
 void alienAttack(int i) {
 	float x_ship = spaceCraft.x;
 	float y_ship = spaceCraft.y;
-	float x_alien = alien.x;
-	float y_alien = alien.y;
+	float x_alien = alien[i].x;
+	float y_alien = alien[i].y;
 
 	float dx = x_ship - x_alien;
 
@@ -309,9 +322,9 @@ void alienAttack(int i) {
 	// draw_string(25, 25, buff);
 	// show_screen();
 
-	alien.dx = dx;
-	alien.dy = dy;
-	alienStates[0] = ALIEN_ATTACKING;
+	alien[i].dx = dx;
+	alien[i].dy = dy;
+	alienStates[i] = ALIEN_ATTACKING;
 }
 
 void shootMissile() {
@@ -377,7 +390,8 @@ void processGameOver() {
 void draw() {
 	drawBackground();
 	drawSpaceCraft();
-	drawAlien();
+	drawAliens();
+	// drawAlien(0);
 	drawMissile();
 }
 
@@ -433,8 +447,14 @@ void drawSpaceCraft() {
 	}
 }
 
-void drawAlien() {
-	draw_sprite(&alien);
+void drawAliens() {
+	for(int i = 0; i < NUM_ALIENS; i++) {
+		drawAlien(i);	
+	}
+}
+
+void drawAlien(int i) {
+	draw_sprite(&alien[i]);
 }
 
 void drawMissile() {
@@ -541,7 +561,8 @@ void initialiseGame() {
 	srand(seed);
 
 	initialiseSpacecraft();
-	initialiseAlien();
+	initialiseAliens();
+	// initialiseAlien(0);
 
 	char buff[2];
 	for(int i = 3; i > 0; i--) {
@@ -568,7 +589,13 @@ void initialiseSpacecraft() {
 	init_sprite(&spaceCraft, xStart, yStart, SHIP_WIDTH, SHIP_HEIGHT, spaceCraftImage);
 }
 
-void initialiseAlien() {
+void initialiseAliens() {
+	for(int i = 0; i < NUM_ALIENS; i++) {
+		initialiseAlien(i);
+	}
+}
+
+void initialiseAlien(int i) {
 	int xStart = rand() % (LCD_X - 2 - ALIEN_WIDTH) + 1;
 	while(xStart >= spaceCraft.x && xStart <= spaceCraft.x + SHIP_WIDTH) {
 		xStart = rand() % (LCD_X - 2 - SHIP_WIDTH) + 1;
@@ -581,10 +608,10 @@ void initialiseAlien() {
 				+ TOP_BORDER + 1;
 	}
 
-	alienStates[0] = ALIEN_WAITING;
-	overflowsSinceAttack[0] = 0;
+	alienStates[i] = ALIEN_WAITING;
+	overflowsSinceAttack[i] = 0;
 
-	init_sprite(&alien, xStart, yStart, SHIP_WIDTH, SHIP_HEIGHT, alienImage);
+	init_sprite(&alien[i], xStart, yStart, SHIP_WIDTH, SHIP_HEIGHT, alienImage);
 }
 
 // int rand() {
@@ -672,6 +699,11 @@ bool collided(Sprite* sprite1, Sprite* sprite2) {
 // 	spaceCraft.bitmap = spaceCraftImages;
 // }
 
+/* ************* Inturrupt Service Routines ************* */
+/* Inturrupt for Timer0 on compared
+ * compares to value for ~8ms
+ * used for debouncing each button signal
+ */
 ISR(TIMER0_COMPA_vect) {
     for(int i = 0; i < NUM_BUTTONS; i++) {
         btn_hists[i] = btn_hists[i] << 1;
@@ -702,10 +734,13 @@ ISR(TIMER0_COMPA_vect) {
         }
     }
 }
-
+/* Inturrupt for Timer1 on compare
+ * compares to value for ~1ms
+ * used to update clock game time
+*/
 ISR(TIMER1_COMPA_vect) {
 	systemTimeMilliseconds++;
-	for(int i = 0; i < 1; i++) {
+	for(int i = 0; i < NUM_ALIENS; i++) {
 		overflowsSinceAttack[i]++;
 	}
 }
