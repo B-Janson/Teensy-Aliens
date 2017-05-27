@@ -151,6 +151,7 @@ void drawMissile(int i);
 void drawMissiles();
 void drawMotherShip();
 void drawMotherShipMissile();
+void drawMotherShipHealth();
 
 void resetGame();
 int calculateSeconds();
@@ -225,7 +226,7 @@ void processInput() {
 				break;
 
 			case BTN_LEFT:
-				gameOver = true;
+				// gameOver = true;
 				break;
 
 			case BTN_RIGHT:
@@ -282,7 +283,7 @@ void processAlien(int i) {
 }
 
 void processMotherShip(int i) {
-	if(!motherShip.is_visible) {
+	if (!motherShip.is_visible) {
 		return;
 	}
 
@@ -293,7 +294,7 @@ void processMotherShip(int i) {
 		}
 	}
 
-	if(motherShipMissileOvf >= 2000 && motherShipShotMissile == 0) {
+	if (motherShipMissileOvf >= 2000 && motherShipShotMissile == 0) {
 		int chance = rand() % 100;
 		if (chance < 25) {
 			motherShipShoot();
@@ -306,12 +307,12 @@ void processMotherShip(int i) {
 	motherShipMissile.x += motherShipMissile.dx;
 	motherShipMissile.y += motherShipMissile.dy;
 
-	if (motherShipState == ALIEN_ATTACKING && (motherShip.x <= 1 || motherShip.x + 	MOTHERSHIP_WIDTH >= LCD_X - 1)) {
+	if (motherShipState == ALIEN_ATTACKING && (motherShip.x <= 2 || motherShip.x + 	MOTHERSHIP_WIDTH >= LCD_X - 2)) {
 
-		if (motherShip.x <= 1) {
-			motherShip.x = 1;
-		} else if (motherShip.x + MOTHERSHIP_WIDTH >= LCD_X - 1) {
-			motherShip.x = LCD_X - 1 - MOTHERSHIP_WIDTH;
+		if (motherShip.x <= 2) {
+			motherShip.x = 2;
+		} else if (motherShip.x + MOTHERSHIP_WIDTH >= LCD_X - 2) {
+			motherShip.x = LCD_X - 2 - MOTHERSHIP_WIDTH;
 		}
 		motherShip.dx = 0;
 		motherShip.dy = 0;
@@ -319,10 +320,10 @@ void processMotherShip(int i) {
 		motherShipChargeOvf = 0;
 	}
 
-	if (motherShipState == ALIEN_ATTACKING && (motherShip.y <= TOP_BORDER + 1 || motherShip.y + MOTHERSHIP_HEIGHT >= LCD_Y - 1)) {
+	if (motherShipState == ALIEN_ATTACKING && (motherShip.y <= TOP_BORDER + 3 || motherShip.y + MOTHERSHIP_HEIGHT >= LCD_Y - 1)) {
 
-		if (motherShip.y <= TOP_BORDER + 1) {
-			motherShip.y = TOP_BORDER + 1;
+		if (motherShip.y <= TOP_BORDER + 3) {
+			motherShip.y = TOP_BORDER + 3;
 		} else if (motherShip.y + MOTHERSHIP_HEIGHT >= LCD_Y - 1) {
 			motherShip.y = LCD_Y - 1 - MOTHERSHIP_HEIGHT;
 		}
@@ -332,7 +333,7 @@ void processMotherShip(int i) {
 		motherShipChargeOvf = 0;
 	}
 
-	if(motherShipShotMissile == 1 && (motherShipMissile.x <= 1 || motherShipMissile.x + MISSILE_WIDTH >= LCD_X - 1)) {
+	if (motherShipShotMissile == 1 && (motherShipMissile.x <= 1 || motherShipMissile.x + MISSILE_WIDTH >= LCD_X - 1)) {
 
 		motherShipMissile.is_visible = 0;
 		motherShipMissileOvf = 0;
@@ -390,8 +391,45 @@ void checkCollisions() {
 				missile[j].is_visible = 0;
 				// initialiseAlien(i);
 				alien[i].is_visible = 0;
-				if(aliensAlive == 0) {
+				if (aliensAlive == 0) {
 					initialiseMotherShip();
+				}
+				break;
+			}
+		}
+	}
+
+	if (motherShip.is_visible) {
+		if (collided(&spaceCraft, &motherShip) || collided(&spaceCraft, &motherShipMissile)) {
+
+			char buff[] = "Player hit by mothership and lost life.";
+			send_debug_string(buff);
+
+			lives--;
+			if (lives == 0) {
+				send_debug_string("Player has lost! Better luck next time!");
+				gameOver = true;
+			} else {
+				initialiseSpacecraft();
+			}
+		}
+
+		for (int j = 0; j < NUM_MISSILES; j++) {
+			if (!missile[j].is_visible) {
+				continue;
+			}
+
+			if (collided(&motherShip, &missile[j])) {
+				// send_debug_string("Missile hit and damaged mothership!");
+				missilesInFlight--;
+				missile[j].is_visible = 0;
+				motherShipHealth--;
+				if (motherShipHealth == 0) {
+					send_debug_string("Player destroyed mothership!");
+					score += 10;
+					initialiseAliens();
+					motherShip.is_visible = 0;
+					motherShipMissile.is_visible = 0;
 				}
 				break;
 			}
@@ -423,7 +461,7 @@ void alienAttack(int i) {
 }
 
 void motherShipCharge() {
-	send_debug_string("Should charge");
+	//send_debug_string("Should charge");
 	float x_ship = spaceCraft.x;
 	float y_ship = spaceCraft.y;
 	float x_alien = motherShip.x;
@@ -471,9 +509,9 @@ void motherShipShoot() {
 	motherShipShotMissile = 1;
 	motherShipMissileOvf = 0;
 
-	char buff[20];
-	sprintf(buff, "x=%f", motherShipMissile.x);
-	send_debug_string(buff);
+	// char buff[20];
+	// sprintf(buff, "x=%f", motherShipMissile.x);
+	// send_debug_string(buff);
 
 }
 
@@ -547,6 +585,7 @@ void draw() {
 	// drawMissile();
 	drawMotherShip();
 	drawMotherShipMissile();
+	drawMotherShipHealth();
 }
 
 void drawBackground() {
@@ -627,6 +666,15 @@ void drawMotherShip() {
 	draw_sprite(&motherShip);
 }
 
+void drawMotherShipHealth() {
+	if(motherShip.is_visible) {
+		int x = motherShip.x - 1;
+		int y = motherShip.y - 2;
+		draw_line(x, y, x + motherShipHealth - 1, y);
+	}
+	
+}
+
 void drawMotherShipMissile() {
 	draw_sprite(&motherShipMissile);
 }
@@ -646,8 +694,7 @@ int main(void) {
 		draw();
 
 		// char buff[20];
-		// sprintf(buff, "%d", missilesInFlight);
-		// _delay_ms(100);
+		// sprintf(buff, "%d", motherShipHealth);
 		// draw_string(30, 30, buff);
 
 		show_screen();
@@ -732,6 +779,9 @@ void initialiseGame() {
 	nextMissilePos = 0;
 	lives = 10;
 	score = 0;
+	motherShip.is_visible = 0;
+	motherShipMissile.is_visible = 0;
+	motherShipHealth = 0;
 
 	draw_string((LCD_X - 12 * 5) / 2, 0, "Alien Attack");
 	draw_string((LCD_X - 14 * 5) / 2, 8, "Brandon Janson");
@@ -810,7 +860,7 @@ void initialiseAlien(int i) {
 }
 
 void initialiseMotherShip() {
-	for(int i = 0; i < 5; i++) {
+	for (int i = 0; i < 5; i++) {
 		clear_screen();
 		draw_centred(2, "Prepare for");
 		draw_centred(10, "Mothership!");
@@ -826,8 +876,14 @@ void initialiseMotherShip() {
 	motherShipChargeOvf = 0;
 	motherShipMissileOvf = 0;
 	motherShipShotMissile = 0;
+	motherShipHealth = 10;
 
 	init_sprite(&motherShip, xStart, yStart, MOTHERSHIP_WIDTH, MOTHERSHIP_HEIGHT, motherShipImage);
+	spaceCraft.x = (LCD_X - SHIP_WIDTH) / 2;
+	spaceCraft.y = LCD_Y - BOTTOM_BORDER - SHIP_HEIGHT - 2;
+	for(int i = 0; i < NUM_MISSILES; i++) {
+		missile[i].is_visible = 0;
+	}
 }
 
 // int rand() {
